@@ -1,0 +1,631 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
+import { 
+  Upload, Table, PieChart as PieIcon, BarChart3, LineChart as LineIcon, 
+  LayoutDashboard, FileSpreadsheet, Settings, Download, Trash2, Plus, Filter,
+  ChevronRight, Database, Info, Loader2, GripVertical, X, Sigma, ListTree, Menu
+} from 'lucide-react';
+
+// Renk paleti (Grafikler için)
+const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+const App = () => {
+  const [data, setData] = useState([]);
+  const [headers, setHeaders] = useState([]);
+  const [activeTab, setActiveTab] = useState('import');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [libLoaded, setLibLoaded] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Dashboard States
+  const [selectedX, setSelectedX] = useState('');
+  const [selectedY, setSelectedY] = useState('');
+  const [chartType, setChartType] = useState('bar');
+
+  // Pivot States
+  const [pivotRows, setPivotRows] = useState([]); // Satırlar için seçilen boyutlar
+  const [pivotValues, setPivotValues] = useState([]); // Değerler { field, op: 'sum'|'avg'|'count' }
+
+  // SheetJS Kütüphanesini CDN üzerinden yükleme
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
+    script.async = true;
+    script.onload = () => setLibLoaded(true);
+    document.body.appendChild(script);
+    
+    // Temizlik
+    return () => {
+      if(document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    }
+  }, []);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file || !libLoaded) return;
+    setIsProcessing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const bstr = event.target.result;
+        // window.XLSX CDN ile yüklendiği için window objesinden erişiyoruz
+        const wb = window.XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const jsonData = window.XLSX.utils.sheet_to_json(ws);
+        
+        if (jsonData.length > 0) {
+          const keys = Object.keys(jsonData[0]);
+          setHeaders(keys);
+          setData(jsonData);
+          setActiveTab('dashboard');
+          
+          // İlk mantıklı varsayılanları seç
+          setSelectedX(keys[0]);
+          const firstNum = keys.find(k => typeof jsonData[0][k] === 'number') || keys[1];
+          setSelectedY(firstNum);
+          
+          // Pivot varsayılanları
+          setPivotRows([keys[0]]);
+          setPivotValues([{ field: firstNum, op: 'sum' }]);
+        }
+      } catch (error) { 
+        console.error("Dosya okuma hatası:", error); 
+        alert("Dosya formatı desteklenmiyor veya bozuk.");
+      } finally { 
+        setIsProcessing(false); 
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const loadSampleData = () => {
+    const sampleHeaders = ["Kategori", "Bölge", "Satış", "Kar", "Adet"];
+    const sampleData = [
+      { Kategori: "Elektronik", Bölge: "Marmara", Satış: 1200, Kar: 200, Adet: 5 },
+      { Kategori: "Gıda", Bölge: "Ege", Satış: 800, Kar: 150, Adet: 12 },
+      { Kategori: "Elektronik", Bölge: "İç Anadolu", Satış: 1500, Kar: 300, Adet: 3 },
+      { Kategori: "Moda", Bölge: "Marmara", Satış: 600, Kar: 100, Adet: 8 },
+      { Kategori: "Gıda", Bölge: "Marmara", Satış: 1100, Kar: 220, Adet: 15 },
+      { Kategori: "Moda", Bölge: "Ege", Satış: 900, Kar: 180, Adet: 4 },
+      { Kategori: "Elektronik", Bölge: "Ege", Satış: 2100, Kar: 450, Adet: 7 },
+      { Kategori: "Kırtasiye", Bölge: "Akdeniz", Satış: 450, Kar: 80, Adet: 20 },
+      { Kategori: "Gıda", Bölge: "Karadeniz", Satış: 1300, Kar: 250, Adet: 10 },
+      { Kategori: "Moda", Bölge: "İç Anadolu", Satış: 750, Kar: 120, Adet: 6 },
+    ];
+    setHeaders(sampleHeaders);
+    setData(sampleData);
+    setActiveTab('dashboard');
+    setSelectedX(sampleHeaders[0]);
+    setSelectedY(sampleHeaders[2]);
+    setPivotRows([sampleHeaders[0], sampleHeaders[1]]);
+    setPivotValues([{ field: sampleHeaders[2], op: 'sum' }, { field: sampleHeaders[3], op: 'avg' }]);
+  };
+
+  // Logic for Dashboard Chart
+  const chartData = useMemo(() => {
+    if (!selectedX || !selectedY || data.length === 0) return [];
+    
+    // Gruplama ve Toplama
+    const groups = data.reduce((acc, curr) => {
+      const key = String(curr[selectedX] || "N/A");
+      const val = Number(curr[selectedY]) || 0;
+      acc[key] = (acc[key] || 0) + val;
+      return acc;
+    }, {});
+    
+    return Object.keys(groups).map(key => ({ name: key, value: groups[key] }));
+  }, [data, selectedX, selectedY]);
+
+  // Logic for Advanced Pivot Table
+  const pivotData = useMemo(() => {
+    if (pivotRows.length === 0 || pivotValues.length === 0 || data.length === 0) return [];
+
+    // Grouping logic
+    const groups = {};
+    data.forEach(item => {
+      const keyParts = pivotRows.map(rowField => item[rowField] || "(Boş)");
+      const groupKey = keyParts.join(" > ");
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          _keys: keyParts,
+          _metrics: pivotValues.map(() => ({ sum: 0, count: 0, min: Infinity, max: -Infinity }))
+        };
+      }
+
+      pivotValues.forEach((valConfig, idx) => {
+        const val = Number(item[valConfig.field]);
+        if (!isNaN(val)) {
+          groups[groupKey]._metrics[idx].sum += val;
+          groups[groupKey]._metrics[idx].count += 1;
+          groups[groupKey]._metrics[idx].min = Math.min(groups[groupKey]._metrics[idx].min, val);
+          groups[groupKey]._metrics[idx].max = Math.max(groups[groupKey]._metrics[idx].max, val);
+        }
+      });
+    });
+
+    return Object.keys(groups).map(key => {
+      const g = groups[key];
+      const result = { id: key, keys: g._keys };
+      pivotValues.forEach((valConfig, idx) => {
+        const m = g._metrics[idx];
+        let finalVal = 0;
+        if (valConfig.op === 'sum') finalVal = m.sum;
+        else if (valConfig.op === 'avg') finalVal = m.count > 0 ? m.sum / m.count : 0;
+        else if (valConfig.op === 'count') finalVal = m.count;
+        else if (valConfig.op === 'max') finalVal = m.max;
+        
+        result[`val_${idx}`] = finalVal;
+      });
+      return result;
+    });
+  }, [data, pivotRows, pivotValues]);
+
+  const togglePivotRow = (header) => {
+    setPivotRows(prev => prev.includes(header) ? prev.filter(h => h !== header) : [...prev, header]);
+  };
+
+  const addPivotValue = (header) => {
+    setPivotValues(prev => [...prev, { field: header, op: 'sum' }]);
+  };
+
+  const removePivotValue = (index) => {
+    setPivotValues(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updatePivotOp = (index, op) => {
+    setPivotValues(prev => prev.map((item, i) => i === index ? { ...item, op } : item));
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden selection:bg-indigo-100">
+      {/* Sidebar */}
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 transition-all duration-300 flex flex-col shadow-sm z-30`}>
+        <div className="p-6 flex items-center gap-3 border-b border-slate-100 h-20">
+          <div className="bg-indigo-600 p-2 rounded-lg shadow-lg shadow-indigo-200">
+            <BarChart3 className="text-white w-6 h-6" />
+          </div>
+          {isSidebarOpen && <span className="font-bold text-xl tracking-tight text-indigo-900">ProBI</span>}
+        </div>
+        
+        <nav className="flex-1 p-4 space-y-2 mt-4">
+          <NavItem 
+            icon={<Upload size={20} />} 
+            label="Veri Yükle" 
+            active={activeTab === 'import'} 
+            onClick={() => setActiveTab('import')} 
+            collapsed={!isSidebarOpen} 
+          />
+          <NavItem 
+            icon={<LayoutDashboard size={20} />} 
+            label="Dashboard" 
+            active={activeTab === 'dashboard'} 
+            onClick={() => setActiveTab('dashboard')} 
+            collapsed={!isSidebarOpen} 
+            disabled={data.length === 0}
+          />
+          <NavItem 
+            icon={<Table size={20} />} 
+            label="Pivot Tablo" 
+            active={activeTab === 'pivot'} 
+            onClick={() => setActiveTab('pivot')} 
+            collapsed={!isSidebarOpen} 
+            disabled={data.length === 0}
+          />
+        </nav>
+        
+        <div className="p-4 border-t border-slate-100">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="w-full flex items-center justify-center p-2 hover:bg-slate-100 rounded-md transition-colors text-slate-400">
+            {isSidebarOpen ? "Paneli Daralt" : <ChevronRight size={20} />}
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-auto flex flex-col relative">
+        {/* Header */}
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 shadow-sm z-20">
+          <div className="flex items-center gap-4">
+            <button className="lg:hidden" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+               <Menu className="text-slate-500"/>
+            </button>
+            <h2 className="text-lg font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              {activeTab === 'import' && <Upload className="text-indigo-500" size={20}/>}
+              {activeTab === 'dashboard' && <LayoutDashboard className="text-indigo-500" size={20}/>}
+              {activeTab === 'pivot' && <Table className="text-indigo-500" size={20}/>}
+              {activeTab === 'import' ? "Veri Yönetimi" : activeTab === 'dashboard' ? "Görsel Analiz" : "Pivot Tasarımcısı"}
+            </h2>
+          </div>
+          <div className="flex gap-4 items-center">
+            {data.length > 0 && (
+              <span className="bg-emerald-100 text-emerald-700 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm border border-emerald-200 flex items-center gap-2">
+                <Database size={14} />
+                {data.length} Kayıt
+              </span>
+            )}
+            {!libLoaded && (
+              <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                <Loader2 className="animate-spin" size={16} />
+                <span className="text-xs font-bold">Excel Motoru Yükleniyor...</span>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="p-6 flex-1 overflow-hidden bg-slate-50/50">
+          
+          {/* IMPORT TAB */}
+          {activeTab === 'import' && (
+            <div className="max-w-4xl mx-auto h-full flex flex-col justify-center animate-in fade-in zoom-in duration-300">
+              <div className={`bg-white p-12 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-center space-y-8 transition-all duration-300 shadow-xl shadow-slate-200/50 ${isProcessing ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/10 hover:shadow-2xl hover:shadow-indigo-100'}`}>
+                {isProcessing ? (
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-indigo-400 rounded-full blur-xl opacity-20 animate-pulse"></div>
+                      <Loader2 size={64} className="text-indigo-600 animate-spin relative z-10" />
+                    </div>
+                    <div>
+                       <p className="font-bold text-indigo-900 text-2xl">Dosya Analiz Ediliyor...</p>
+                       <p className="text-indigo-500 mt-2">Veri tipleri ayrıştırılıyor ve şemalar oluşturuluyor.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-indigo-50 p-8 rounded-full group-hover:scale-110 transition-transform duration-300 ring-8 ring-indigo-50/50">
+                      <FileSpreadsheet className="w-16 h-16 text-indigo-600" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-3xl font-black text-slate-800 tracking-tight">Excel veya CSV Aktarın</h3>
+                      <p className="text-slate-500 text-lg max-w-md mx-auto">Sürükleyip bırakın veya bilgisayarınızdan bir dosya seçin. Anında analizlere başlayın.</p>
+                    </div>
+                    <div className="flex flex-col gap-4 w-full max-w-xs">
+                      <label className={`w-full py-4 px-6 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all cursor-pointer transform hover:-translate-y-1 text-center flex items-center justify-center gap-2 ${!libLoaded ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95'}`}>
+                        {libLoaded ? <><Upload size={20}/> Dosya Seçin</> : "Motor Bekleniyor..."}
+                        <input type="file" className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} disabled={!libLoaded} />
+                      </label>
+                      <button onClick={loadSampleData} className="text-indigo-600 bg-white border border-indigo-100 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-colors text-sm">
+                        Örnek veriyle keşfet
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* DASHBOARD TAB */}
+          {activeTab === 'dashboard' && data.length > 0 && (
+            <div className="grid grid-cols-12 gap-6 h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+              {/* Settings Panel */}
+              <div className="col-span-12 lg:col-span-3 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-2 pb-4 border-b border-slate-100">
+                    <Settings size={18} className="text-indigo-600" /> Grafik Ayarları
+                  </h4>
+                  <div className="space-y-6">
+                    <FieldSelect 
+                      label="Gruplama Boyutu (X Ekseni)" 
+                      value={selectedX} 
+                      options={headers} 
+                      onChange={setSelectedX} 
+                      icon={<ListTree size={14} />}
+                    />
+                    <FieldSelect 
+                      label="Sayısal Metrik (Y Ekseni)" 
+                      value={selectedY} 
+                      options={headers} 
+                      onChange={setSelectedY} 
+                      icon={<Sigma size={14} />}
+                    />
+                    
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex gap-2 items-center">
+                         Grafik Tipi
+                       </label>
+                       <div className="grid grid-cols-3 gap-2">
+                        <ChartTypeBtn active={chartType === 'bar'} onClick={() => setChartType('bar')} icon={<BarChart3 size={20} />} label="Sütun" />
+                        <ChartTypeBtn active={chartType === 'line'} onClick={() => setChartType('line')} icon={<LineIcon size={20} />} label="Çizgi" />
+                        <ChartTypeBtn active={chartType === 'pie'} onClick={() => setChartType('pie')} icon={<PieIcon size={20} />} label="Pasta" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-indigo-900 text-white p-6 rounded-2xl shadow-lg shadow-indigo-200/50 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                  <h4 className="font-bold text-lg relative z-10">Hızlı İpucu</h4>
+                  <p className="text-indigo-200 text-sm mt-2 relative z-10 leading-relaxed">
+                    X ekseninde kategorik değerleri (örn: Şehir, Ürün), Y ekseninde sayısal değerleri (örn: Satış, Adet) seçerseniz en anlamlı sonuçları alırsınız.
+                  </p>
+                </div>
+              </div>
+
+              {/* Chart Area */}
+              <div className="col-span-12 lg:col-span-9 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full relative overflow-hidden">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-800">{selectedX} bazında {selectedY}</h3>
+                    <p className="text-slate-500 text-sm mt-1">Veri dağılımı ve toplam değer analizi</p>
+                  </div>
+                  <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors">
+                    <Download size={20} />
+                  </button>
+                </div>
+                
+                <div className="flex-1 w-full min-h-0 bg-slate-50 rounded-2xl border border-slate-100 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {chartType === 'bar' ? (
+                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                        <Tooltip 
+                          contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '12px 20px'}} 
+                          cursor={{fill: '#f1f5f9'}} 
+                        />
+                        <Bar dataKey="value" fill="url(#colorGradient)" radius={[6, 6, 0, 0]}>
+                            {chartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                        </Bar>
+                      </BarChart>
+                    ) : chartType === 'line' ? (
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                        <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'}} />
+                        <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={4} dot={{r: 6, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 8}} />
+                      </LineChart>
+                    ) : (
+                      <PieChart>
+                        <Pie data={chartData} cx="50%" cy="50%" innerRadius={80} outerRadius={140} paddingAngle={5} dataKey="value" stroke="none">
+                          {chartData.map((e, i) => <Cell key={`c-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'}} />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                      </PieChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PIVOT TAB */}
+          {activeTab === 'pivot' && data.length > 0 && (
+            <div className="flex flex-col lg:flex-row gap-6 h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+              {/* Pivot Builder Pane */}
+              <div className="w-full lg:w-80 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col shrink-0 overflow-hidden h-1/3 lg:h-full">
+                <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-700 flex items-center gap-2">
+                  <ListTree size={18} className="text-indigo-600" /> Pivot Oluşturucu
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                  {/* Field List */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mevcut Alanlar</p>
+                    <div className="space-y-1 max-h-40 lg:max-h-60 overflow-y-auto">
+                      {headers.map(h => (
+                        <div key={h} className="group flex items-center justify-between p-2 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-indigo-50 hover:border-indigo-200 transition-all cursor-default">
+                          <span className="text-xs font-semibold text-slate-600 truncate mr-2 flex items-center gap-1">
+                            <GripVertical size={10} className="text-slate-300"/> {h}
+                          </span>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button title="Satıra Ekle" onClick={() => togglePivotRow(h)} className="p-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-indigo-600 hover:bg-indigo-600 hover:text-white transition-colors"><ListTree size={12}/></button>
+                            <button title="Değere Ekle" onClick={() => addPivotValue(h)} className="p-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-emerald-600 hover:bg-emerald-600 hover:text-white transition-colors"><Sigma size={12}/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Rows Well */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between">
+                      Satırlar <span>({pivotRows.length})</span>
+                    </p>
+                    <div className="min-h-[60px] p-2 bg-indigo-50/30 rounded-xl border border-dashed border-indigo-200 space-y-1">
+                      {pivotRows.map((h, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm text-xs font-bold border border-indigo-100 animate-in slide-in-from-left-2">
+                          <div className="flex items-center gap-2 text-indigo-700">
+                            <ListTree size={14} className="text-indigo-300" /> {h}
+                          </div>
+                          <button onClick={() => togglePivotRow(h)}><X size={14} className="text-slate-400 hover:text-red-500" /></button>
+                        </div>
+                      ))}
+                      {pivotRows.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">Sütunları buraya ekleyin</p>}
+                    </div>
+                  </div>
+
+                  {/* Values Well */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between">
+                      Değerler <span>({pivotValues.length})</span>
+                    </p>
+                    <div className="min-h-[100px] p-2 bg-emerald-50/30 rounded-xl border border-dashed border-emerald-200 space-y-2">
+                      {pivotValues.map((val, i) => (
+                        <div key={i} className="bg-white rounded-lg shadow-sm border border-emerald-100 overflow-hidden animate-in slide-in-from-left-2">
+                          <div className="flex items-center justify-between p-2 bg-emerald-50/50 text-xs font-bold border-b border-emerald-50">
+                             <div className="flex items-center gap-2 truncate text-emerald-800">
+                               <Sigma size={12} className="text-emerald-500" /> {val.field}
+                             </div>
+                             <button onClick={() => removePivotValue(i)}><X size={14} className="text-slate-300 hover:text-red-500" /></button>
+                          </div>
+                          <div className="p-2 flex gap-1">
+                            {['sum', 'avg', 'count', 'max'].map(op => (
+                              <button 
+                                key={op} 
+                                onClick={() => updatePivotOp(i, op)}
+                                className={`flex-1 text-[9px] font-black uppercase py-1 rounded transition-colors ${val.op === op ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                              >
+                                {op === 'sum' ? 'Top' : op === 'avg' ? 'Ort' : op === 'count' ? 'Say' : 'Max'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {pivotValues.length === 0 && <p className="text-[10px] text-slate-400 text-center py-8">Metrikleri buraya ekleyin</p>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pivot Result Table */}
+              <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden h-2/3 lg:h-full">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-indigo-100 p-2 rounded-lg"><Table size={18} className="text-indigo-600"/></div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 tracking-tight">Özet Tablo</h3>
+                        <p className="text-xs text-slate-500">Dinamik olarak hesaplanmış sonuçlar</p>
+                      </div>
+                    </div>
+                    <button className="flex items-center gap-2 text-xs bg-slate-900 text-white px-3 py-2 rounded-lg font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                      <Download size={14} /> <span className="hidden sm:inline">Excel Olarak İndir</span>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-auto custom-scrollbar">
+                  {pivotData.length > 0 ? (
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead className="sticky top-0 z-10 shadow-sm">
+                        <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
+                          {pivotRows.map(h => (
+                            <th key={h} className="px-6 py-4 border-b border-slate-200 bg-slate-50">{h}</th>
+                          ))}
+                          {pivotValues.map((val, idx) => (
+                            <th key={idx} className="px-6 py-4 text-center border-b border-l border-slate-200 bg-slate-100 text-slate-700">
+                              {val.op.toUpperCase()} ({val.field})
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {pivotData.map((row) => (
+                          <tr key={row.id} className="hover:bg-indigo-50/30 transition-colors group">
+                            {row.keys.map((key, i) => (
+                              <td key={i} className={`px-6 py-4 border-r border-slate-50/50 font-medium ${i === 0 ? 'text-indigo-900 font-bold' : 'text-slate-500 italic'}`}>
+                                {key}
+                              </td>
+                            ))}
+                            {pivotValues.map((_, idx) => (
+                              <td key={idx} className="px-6 py-4 text-center font-mono font-medium text-slate-600 bg-slate-50/20 group-hover:bg-indigo-50/40 border-l border-slate-50">
+                                {typeof row[`val_${idx}`] === 'number' ? row[`val_${idx}`].toLocaleString(undefined, { maximumFractionDigits: 1 }) : row[`val_${idx}`]}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 bg-slate-900 text-white font-bold border-t-4 border-indigo-500 shadow-2xl">
+                        <tr>
+                          <td colSpan={pivotRows.length} className="px-6 py-4 uppercase text-indigo-200 text-[10px] tracking-widest">Genel Toplam</td>
+                          {pivotValues.map((_, idx) => {
+                             const total = pivotData.reduce((acc, r) => acc + (Number(r[`val_${idx}`]) || 0), 0);
+                             return <td key={idx} className="px-6 py-4 text-center text-white border-l border-slate-700 font-mono text-sm">{total.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                          })}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
+                      <div className="p-6 bg-slate-50 rounded-full">
+                        <Table size={48} strokeWidth={1} className="text-slate-400" />
+                      </div>
+                      <p className="font-bold text-slate-500">Pivot tabloyu oluşturmak için soldan alanları seçin.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EMPTY STATE */}
+          {data.length === 0 && activeTab !== 'import' && (
+             <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-6 animate-in zoom-in duration-300">
+               <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center">
+                 <Database size={48} className="text-slate-400" />
+               </div>
+               <div className="text-center">
+                 <p className="text-2xl font-bold text-slate-700">Henüz Veri Yok</p>
+                 <p className="text-slate-500 mt-2">Analizlere başlamak için önce bir veri seti yüklemelisiniz.</p>
+               </div>
+               <button onClick={() => setActiveTab('import')} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
+                 Veri Yükleme Ekranına Git
+               </button>
+             </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+// --- YARDIMCI KOMPONENTLER ---
+
+const NavItem = ({ icon, label, active, onClick, collapsed, disabled }) => (
+  <button 
+    onClick={onClick} 
+    disabled={disabled}
+    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group relative
+      ${active 
+        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
+        : disabled 
+          ? 'opacity-50 cursor-not-allowed text-slate-300' 
+          : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
+      }
+    `}
+  >
+    <span className={`shrink-0 transition-transform ${active ? 'scale-110' : 'group-hover:scale-110'}`}>{icon}</span>
+    {!collapsed && (
+      <span className="font-bold text-sm tracking-tight">{label}</span>
+    )}
+    {collapsed && !disabled && (
+      <div className="absolute left-14 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+        {label}
+      </div>
+    )}
+  </button>
+);
+
+const ChartTypeBtn = ({ active, onClick, icon, label }) => (
+  <button 
+    onClick={onClick} 
+    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all duration-200
+      ${active 
+        ? 'bg-indigo-50 border-indigo-600 text-indigo-600 shadow-sm scale-95' 
+        : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 hover:bg-slate-50'
+      }
+    `}
+  >
+    {icon}
+    <span className="text-[9px] font-black uppercase tracking-wider">{label}</span>
+  </button>
+);
+
+const FieldSelect = ({ label, value, options, onChange, icon }) => (
+  <div className="space-y-2">
+    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+      {icon} {label}
+    </label>
+    <div className="relative">
+      <select 
+        value={value} 
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition-all appearance-none outline-none cursor-pointer hover:bg-white"
+      >
+        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+        <ChevronRight className="rotate-90" size={16}/>
+      </div>
+    </div>
+  </div>
+);
+
+export default App;
