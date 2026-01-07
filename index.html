@@ -186,7 +186,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden selection:bg-indigo-100">
       {/* Sidebar */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 transition-all duration-300 flex flex-col shadow-sm z-30`}>
+      <aside className={`${isSidebarOpen ? 'w-64 translate-x-0' : 'w-20 -translate-x-full lg:translate-x-0 lg:w-20'} fixed inset-y-0 left-0 lg:relative bg-white border-r border-slate-200 transition-all duration-300 flex flex-col shadow-sm z-30`}>
         <div className="p-6 flex items-center gap-3 border-b border-slate-100 h-20">
           <div className="bg-indigo-600 p-2 rounded-lg shadow-lg shadow-indigo-200">
             <BarChart3 className="text-white w-6 h-6" />
@@ -220,50 +220,55 @@ const App = () => {
           />
         </nav>
         
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 hidden lg:block">
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="w-full flex items-center justify-center p-2 hover:bg-slate-100 rounded-md transition-colors text-slate-400">
             {isSidebarOpen ? "Paneli Daralt" : <ChevronRight size={20} />}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto flex flex-col relative">
+      {/* Mobile Overlay */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/20 z-20 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
+      <main className="flex-1 overflow-auto flex flex-col relative w-full">
         {/* Header */}
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 shadow-sm z-20">
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shrink-0 shadow-sm z-20 sticky top-0">
           <div className="flex items-center gap-4">
-            <button className="lg:hidden" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-               <Menu className="text-slate-500"/>
+            <button className="lg:hidden p-2 -ml-2 hover:bg-slate-100 rounded-lg" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+               <Menu className="text-slate-600"/>
             </button>
             <h2 className="text-lg font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
               {activeTab === 'import' && <Upload className="text-indigo-500" size={20}/>}
               {activeTab === 'dashboard' && <LayoutDashboard className="text-indigo-500" size={20}/>}
               {activeTab === 'pivot' && <Table className="text-indigo-500" size={20}/>}
-              {activeTab === 'import' ? "Veri Yönetimi" : activeTab === 'dashboard' ? "Görsel Analiz" : "Pivot Tasarımcısı"}
+              <span className="hidden sm:inline">{activeTab === 'import' ? "Veri Yönetimi" : activeTab === 'dashboard' ? "Görsel Analiz" : "Pivot Tasarımcısı"}</span>
             </h2>
           </div>
           <div className="flex gap-4 items-center">
             {data.length > 0 && (
-              <span className="bg-emerald-100 text-emerald-700 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm border border-emerald-200 flex items-center gap-2">
+              <span className="bg-emerald-100 text-emerald-700 px-3 lg:px-4 py-1.5 rounded-full text-xs font-bold shadow-sm border border-emerald-200 flex items-center gap-2 whitespace-nowrap">
                 <Database size={14} />
-                {data.length} Kayıt
+                {data.length} <span className="hidden sm:inline">Kayıt</span>
               </span>
             )}
             {!libLoaded && (
               <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
                 <Loader2 className="animate-spin" size={16} />
-                <span className="text-xs font-bold">Excel Motoru Yükleniyor...</span>
+                <span className="text-xs font-bold hidden sm:inline">Motor Yükleniyor...</span>
               </div>
             )}
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="p-6 flex-1 overflow-hidden bg-slate-50/50">
+        <div className="p-4 lg:p-6 flex-1 overflow-y-auto bg-slate-50/50">
           
           {/* IMPORT TAB */}
           {activeTab === 'import' && (
-            <div className="max-w-4xl mx-auto h-full flex flex-col justify-center animate-in fade-in zoom-in duration-300">
-              <div className={`bg-white p-12 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-center space-y-8 transition-all duration-300 shadow-xl shadow-slate-200/50 ${isProcessing ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/10 hover:shadow-2xl hover:shadow-indigo-100'}`}>
+            <div className="max-w-4xl mx-auto min-h-[500px] h-full flex flex-col justify-center animate-in fade-in zoom-in duration-300">
+              <div className={`bg-white p-8 lg:p-12 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-center space-y-8 transition-all duration-300 shadow-xl shadow-slate-200/50 ${isProcessing ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/10 hover:shadow-2xl hover:shadow-indigo-100'}`}>
                 {isProcessing ? (
                   <div className="flex flex-col items-center gap-6">
                     <div className="relative">
@@ -301,9 +306,9 @@ const App = () => {
 
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && data.length > 0 && (
-            <div className="grid grid-cols-12 gap-6 h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-12 gap-6 h-auto lg:h-full lg:overflow-hidden animate-in slide-in-from-bottom-4 duration-500 pb-20 lg:pb-0">
               {/* Settings Panel */}
-              <div className="col-span-12 lg:col-span-3 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="col-span-12 lg:col-span-3 space-y-4 lg:overflow-y-auto pr-0 lg:pr-2 custom-scrollbar order-2 lg:order-1">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                   <h4 className="font-bold text-slate-800 flex items-center gap-2 pb-4 border-b border-slate-100">
                     <Settings size={18} className="text-indigo-600" /> Grafik Ayarları
@@ -347,10 +352,10 @@ const App = () => {
               </div>
 
               {/* Chart Area */}
-              <div className="col-span-12 lg:col-span-9 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full relative overflow-hidden">
+              <div className="col-span-12 lg:col-span-9 bg-white p-4 lg:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[500px] lg:h-full relative overflow-hidden order-1 lg:order-2">
                 <div className="flex justify-between items-start mb-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-800">{selectedX} bazında {selectedY}</h3>
+                    <h3 className="text-xl lg:text-2xl font-bold text-slate-800">{selectedX} bazında {selectedY}</h3>
                     <p className="text-slate-500 text-sm mt-1">Veri dağılımı ve toplam değer analizi</p>
                   </div>
                   <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors">
@@ -358,10 +363,10 @@ const App = () => {
                   </button>
                 </div>
                 
-                <div className="flex-1 w-full min-h-0 bg-slate-50 rounded-2xl border border-slate-100 p-4">
+                <div className="flex-1 w-full min-h-0 bg-slate-50 rounded-2xl border border-slate-100 p-2 lg:p-4">
                   <ResponsiveContainer width="100%" height="100%">
                     {chartType === 'bar' ? (
-                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
@@ -369,14 +374,14 @@ const App = () => {
                           contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', padding: '12px 20px'}} 
                           cursor={{fill: '#f1f5f9'}} 
                         />
-                        <Bar dataKey="value" fill="url(#colorGradient)" radius={[6, 6, 0, 0]}>
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                             {chartData.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                         </Bar>
                       </BarChart>
                     ) : chartType === 'line' ? (
-                      <LineChart data={chartData}>
+                      <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
@@ -400,14 +405,14 @@ const App = () => {
 
           {/* PIVOT TAB */}
           {activeTab === 'pivot' && data.length > 0 && (
-            <div className="flex flex-col lg:flex-row gap-6 h-full overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col lg:flex-row gap-6 h-auto lg:h-full lg:overflow-hidden animate-in slide-in-from-bottom-4 duration-500 pb-20 lg:pb-0">
               {/* Pivot Builder Pane */}
-              <div className="w-full lg:w-80 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col shrink-0 overflow-hidden h-1/3 lg:h-full">
+              <div className="w-full lg:w-80 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col shrink-0 overflow-hidden h-auto lg:h-full order-2 lg:order-1">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-700 flex items-center gap-2">
                   <ListTree size={18} className="text-indigo-600" /> Pivot Oluşturucu
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar max-h-[400px] lg:max-h-full">
                   {/* Field List */}
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mevcut Alanlar</p>
@@ -478,7 +483,7 @@ const App = () => {
               </div>
 
               {/* Pivot Result Table */}
-              <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden h-2/3 lg:h-full">
+              <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden h-[500px] lg:h-full order-1 lg:order-2">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
                     <div className="flex items-center gap-3">
                       <div className="bg-indigo-100 p-2 rounded-lg"><Table size={18} className="text-indigo-600"/></div>
@@ -497,10 +502,10 @@ const App = () => {
                       <thead className="sticky top-0 z-10 shadow-sm">
                         <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
                           {pivotRows.map(h => (
-                            <th key={h} className="px-6 py-4 border-b border-slate-200 bg-slate-50">{h}</th>
+                            <th key={h} className="px-6 py-4 border-b border-slate-200 bg-slate-50 whitespace-nowrap">{h}</th>
                           ))}
                           {pivotValues.map((val, idx) => (
-                            <th key={idx} className="px-6 py-4 text-center border-b border-l border-slate-200 bg-slate-100 text-slate-700">
+                            <th key={idx} className="px-6 py-4 text-center border-b border-l border-slate-200 bg-slate-100 text-slate-700 whitespace-nowrap">
                               {val.op.toUpperCase()} ({val.field})
                             </th>
                           ))}
@@ -510,12 +515,12 @@ const App = () => {
                         {pivotData.map((row) => (
                           <tr key={row.id} className="hover:bg-indigo-50/30 transition-colors group">
                             {row.keys.map((key, i) => (
-                              <td key={i} className={`px-6 py-4 border-r border-slate-50/50 font-medium ${i === 0 ? 'text-indigo-900 font-bold' : 'text-slate-500 italic'}`}>
+                              <td key={i} className={`px-6 py-4 border-r border-slate-50/50 font-medium whitespace-nowrap ${i === 0 ? 'text-indigo-900 font-bold' : 'text-slate-500 italic'}`}>
                                 {key}
                               </td>
                             ))}
                             {pivotValues.map((_, idx) => (
-                              <td key={idx} className="px-6 py-4 text-center font-mono font-medium text-slate-600 bg-slate-50/20 group-hover:bg-indigo-50/40 border-l border-slate-50">
+                              <td key={idx} className="px-6 py-4 text-center font-mono font-medium text-slate-600 bg-slate-50/20 group-hover:bg-indigo-50/40 border-l border-slate-50 whitespace-nowrap">
                                 {typeof row[`val_${idx}`] === 'number' ? row[`val_${idx}`].toLocaleString(undefined, { maximumFractionDigits: 1 }) : row[`val_${idx}`]}
                               </td>
                             ))}
@@ -524,10 +529,10 @@ const App = () => {
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-slate-900 text-white font-bold border-t-4 border-indigo-500 shadow-2xl">
                         <tr>
-                          <td colSpan={pivotRows.length} className="px-6 py-4 uppercase text-indigo-200 text-[10px] tracking-widest">Genel Toplam</td>
+                          <td colSpan={pivotRows.length} className="px-6 py-4 uppercase text-indigo-200 text-[10px] tracking-widest whitespace-nowrap">Genel Toplam</td>
                           {pivotValues.map((_, idx) => {
                              const total = pivotData.reduce((acc, r) => acc + (Number(r[`val_${idx}`]) || 0), 0);
-                             return <td key={idx} className="px-6 py-4 text-center text-white border-l border-slate-700 font-mono text-sm">{total.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                             return <td key={idx} className="px-6 py-4 text-center text-white border-l border-slate-700 font-mono text-sm whitespace-nowrap">{total.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
                           })}
                         </tr>
                       </tfoot>
